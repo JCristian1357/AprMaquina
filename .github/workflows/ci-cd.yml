@@ -1,0 +1,40 @@
+name: Wine Classifier CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # <-- Activa el botón "Run workflow" en la interfaz de GitHub Actions
+
+jobs:
+  test-and-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Descargar el código del repositorio
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      # 2. Configurar el entorno de Python
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # 3. Instalar las dependencias del proyecto
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # 4. (Opcional) Generar o asegurar que los artefactos del modelo existan
+      - name: Run model training
+        run: |
+          python entrenar.py
+
+      # 5. Ejecutar la suite de pruebas automatizadas con Pytest (QA y MLOps)
+      - name: Run Pytest suite
+        run: |
+          pytest test_main.py -v
