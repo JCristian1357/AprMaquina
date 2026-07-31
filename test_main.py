@@ -6,9 +6,17 @@ from main import app
 client = TestClient(app)
 
 
-def test_root_returns_service_status():
-    """Verifica que el endpoint raiz retorne el estado del servicio en inglés."""
+def test_root_returns_frontend_html():
+    """Verifica que el endpoint raíz sirva la interfaz web HTML."""
     response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "<!DOCTYPE html>" in response.text
+
+
+def test_api_info_returns_service_status():
+    """Verifica que el endpoint /api/info retorne el estado del servicio en JSON."""
+    response = client.get("/api/info")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
@@ -23,7 +31,7 @@ def test_health_returns_ok():
 
 
 def test_predict_returns_valid_structure_for_valid_payload():
-    """Verifica que la prediccion retorne la estructura completa esperada por el frontend."""
+    """Verifica que la predicción retorne la estructura completa esperada por el frontend."""
     payload = {
         "alcohol": 13.0,
         "malic_acid": 2.3,
@@ -49,9 +57,9 @@ def test_predict_returns_valid_structure_for_valid_payload():
 
 
 def test_predict_rejects_invalid_payload():
-    """Verifica que la API rechace valores no validos (<= 0 o tipos incorrectos) con HTTP 422."""
+    """Verifica que la API rechace valores no válidos (<= 0 o tipos incorrectos) con HTTP 422."""
     invalid_payload = {
-        "alcohol": 0,  # Falla la regla gt=0 de Pydantic en main.py
+        "alcohol": 0,
         "malic_acid": 2.3,
         "color_intensity": 5.0,
         "flavanoids": 2.0,
@@ -61,14 +69,9 @@ def test_predict_rejects_invalid_payload():
 
 
 def test_calidad_metrica_modelo_mlops():
-    """
-    Prueba de MLOps (Integrante 4):
-    Audita que el archivo generado por entrenar.py exista en modelo/metricas_modelo.json
-    y que el Silhouette Score cumpla el umbral de calidad aceptable (>= 0.35).
-    """
+    """Prueba de MLOps: Audita que el archivo de métricas exista y cumpla el umbral."""
     ruta_metricas = os.path.join("modelo", "metricas_modelo.json")
 
-    # Auditar las métricas generadas por el script de entrenamiento
     assert os.path.exists(
         ruta_metricas
     ), "El archivo modelo/metricas_modelo.json no existe."
@@ -78,7 +81,6 @@ def test_calidad_metrica_modelo_mlops():
 
     assert "silhouette_score" in metricas
     assert isinstance(metricas["silhouette_score"], float)
-    # Exigir un coeficiente de silueta mínimo aceptable
     assert (
         metricas["silhouette_score"] >= 0.35
     ), f"Calidad insuficiente: Silhouette Score es {metricas['silhouette_score']}"
