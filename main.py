@@ -2,7 +2,8 @@ import os
 from contextlib import asynccontextmanager
 
 import joblib
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -82,16 +83,31 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Wine Profile Classifier",
-    description="FastAPI-based wine clustering classifier using a mock-trained KMeans model",
+    description="FastAPI-based wine clustering classifier using KMeans model",
     version="1.0.0",
     lifespan=lifespan,
 )
 
-app.mount("/app", StaticFiles(directory="static", html=True), name="static")
+# Montar estáticos para assets adicionales si los hubiera
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-@app.get("/", response_model=RootResponse)
+@app.get("/")
 async def root():
+    """Servir la interfaz de usuario en la raiz si existe el index.html."""
+    if os.path.exists("static/index.html"):
+        return FileResponse("static/index.html")
+    return {
+        "status": "ok",
+        "service": "Wine Profile Classifier",
+        "docs": "/docs",
+    }
+
+
+@app.get("/api/info", response_model=RootResponse)
+async def api_info():
+    """Endpoint de información para pruebas de salud del servicio."""
     return {
         "status": "ok",
         "service": "Wine Profile Classifier",
@@ -112,7 +128,14 @@ async def predict(payload: WineInput):
         if model is None or scaler is None:
             raise RuntimeError("Using mock fallback")
 
-        features = [[payload.alcohol, payload.malic_acid, payload.color_intensity, payload.flavanoids]]
+        features = [
+            [
+                payload.alcohol,
+                payload.malic_acid,
+                payload.color_intensity,
+                payload.flavanoids,
+            ]
+        ]
         scaled_features = scaler.transform(features)
         cluster_id = int(model.predict(scaled_features)[0])
         profile = PROFILE_MAP.get(cluster_id, PROFILE_MAP[2])
