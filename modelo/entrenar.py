@@ -1,82 +1,86 @@
-# train_model.py - Ingeniero de Datos y ML
+# entrenar_vinos.py - Ingeniero de Datos y ML (Modelado No Supervisado)
 
-from sklearn.datasets import fetch_california_housing
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.datasets import load_wine
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 import pandas as pd
-import numpy as np
 import joblib
 import json
+import os
 
 # ── 1. CARGAR Y FILTRAR EL DATASET ──────────────────────────────────────────
-print("Cargando dataset...")
-datos = fetch_california_housing()
+print("Cargando dataset de vinos...")
+datos = load_wine()
 df = pd.DataFrame(datos.data, columns=datos.feature_names)
-df["PRECIO"] = datos.target  # precio en cientos de miles de dólares
 
-# Nos quedamos SOLO con las 3 variables acordadas con el equipo
-df_filtrado = df[["MedInc", "HouseAge", "AveRooms", "PRECIO"]]
+# Nos quedamos SOLO con las 4 variables acordadas con el equipo
+df_filtrado = df[["alcohol", "malic_acid", "color_intensity", "flavanoids"]]
 print(df_filtrado.head())
 print(f"\nForma del dataset: {df_filtrado.shape}")
 
-# ── 2. SEPARAR VARIABLES DE ENTRADA Y SALIDA ─────────────────────────────────
-X = df_filtrado[["MedInc", "HouseAge", "AveRooms"]]
-y = df_filtrado["PRECIO"]
+X = df_filtrado[["alcohol", "malic_acid", "color_intensity", "flavanoids"]]
 
-# Dividir en entrenamiento (80%) y prueba (20%)
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
-print(f"\nDatos de entrenamiento: {X_train.shape[0]} filas")
-print(f"Datos de prueba:        {X_test.shape[0]} filas")
+# ── 2. ESCALAR LOS DATOS ─────────────────────────────────────────────────────
+print("\nEscalando los datos con StandardScaler...")
+escalador = StandardScaler()
+X_escalado = escalador.fit_transform(X)
+print("Datos escalados correctamente.")
 
-# ── 3. ENTRENAR EL MODELO CON HIPERPARÁMETRO OPTIMIZADO ──────────────────────
-# Probamos 3 valores de max_depth y elegimos el mejor
-print("\nOptimizando hiperparámetro max_depth...")
+# ── 3. OPTIMIZAR EL HIPERPARÁMETRO n_clusters ────────────────────────────────
+# Probamos varios valores de k y elegimos el que da mejor Silhouette Score.
+# Esto justifica con datos por qué usamos 3 clusters (y no un número arbitrario).
+print("\nOptimizando hiperparámetro n_clusters...")
 resultados = {}
-for profundidad in [3, 5, 10]:
-    modelo_temp = RandomForestRegressor(max_depth=profundidad, random_state=42)
-    modelo_temp.fit(X_train, y_train)
-    puntaje = r2_score(y_test, modelo_temp.predict(X_test))
-    resultados[profundidad] = puntaje
-    print(f"  max_depth={profundidad}  →  R² = {puntaje:.4f}")
+for k in range(2, 9):
+    modelo_temp = KMeans(n_clusters=k, random_state=42, n_init=10)
+    etiquetas_temp = modelo_temp.fit_predict(X_escalado)
+    sil_temp = silhouette_score(X_escalado, etiquetas_temp)
+    resultados[k] = sil_temp
+    print(f"  n_clusters={k}  ->  Silhouette = {sil_temp:.4f}")
 
-mejor_profundidad = max(resultados, key=resultados.get)
-print(f"\n✅ Mejor max_depth: {mejor_profundidad} (R² = {resultados[mejor_profundidad]:.4f})")
+mejor_k = max(resultados, key=resultados.get)
+print(f"\nMejor n_clusters: {mejor_k} (Silhouette = {resultados[mejor_k]:.4f})")
 
 # ── 4. ENTRENAR EL MODELO FINAL CON EL MEJOR HIPERPARÁMETRO ──────────────────
-modelo_final = RandomForestRegressor(max_depth=mejor_profundidad, random_state=42)
-modelo_final.fit(X_train, y_train)
+modelo_kmeans = KMeans(n_clusters=mejor_k, random_state=42, n_init=10)
+etiquetas = modelo_kmeans.fit_predict(X_escalado)
 
-# ── 5. CALCULAR MÉTRICAS FINALES ──────────────────────────────────────────────
-y_pred = modelo_final.predict(X_test)
-r2    = r2_score(y_test, y_pred)
-mse   = mean_squared_error(y_test, y_pred)
-rmse  = np.sqrt(mse)
+sil_score = silhouette_score(X_escalado, etiquetas)
+inercia = modelo_kmeans.inertia_
 
-print(f"\n📊 Métricas finales:")
-print(f"   R²   = {r2:.4f}")
-print(f"   MSE  = {mse:.4f}")
-print(f"   RMSE = {rmse:.4f}")
+print(f"\nMetricas finales del modelo:")
+print(f"   Silhouette Score = {sil_score:.4f}")
+print(f"   Inercia          = {inercia:.4f}")
 
-# ── 6. EXPORTAR EL MODELO ─────────────────────────────────────────────────────
-joblib.dump(modelo_final, "modelo_casas.pkl")
-print("\n💾 Modelo guardado como: modelo_casas.pkl")
+# Distribución de vinos por cluster (útil para verificar que no quedó un
+# cluster vacío o desbalanceado de forma extraña)
+distribucion = pd.Series(etiquetas).value_counts().sort_index()
+print(f"\nDistribución de vinos por cluster:")
+for cluster, cantidad in distribucion.items():
+    print(f"   Cluster {cluster}: {cantidad} vinos")
 
-# ── 7. EXPORTAR LAS MÉTRICAS EN JSON (para el Integrante 4) ──────────────────
+# ── 5. EXPORTAR MODELO Y ESCALADOR ───────────────────────────────────────────
+os.makedirs("modelo", exist_ok=True)
+joblib.dump(modelo_kmeans, "modelo/modelo_vinos.pkl")
+joblib.dump(escalador, "modelo/scaler_vinos.pkl")
+print("\n💾 Modelo guardado como:    modelo/modelo_vinos.pkl")
+print("💾 Escalador guardado como: modelo/scaler_vinos.pkl")
+
+# ── 6. EXPORTAR LAS MÉTRICAS EN JSON (para el Integrante 4) ──────────────────
 metricas = {
-    "r2_score": round(r2, 4),
-    "mse":      round(mse, 4),
-    "rmse":     round(rmse, 4),
-    "mejor_parametro": {"max_depth": mejor_profundidad},
-    "variables_usadas": ["MedInc", "HouseAge", "AveRooms"]
+    "silhouette_score": round(sil_score, 4),
+    "inertia": round(inercia, 4),
+    "n_clusters": mejor_k,
+    "busqueda_n_clusters": {str(k): round(v, 4) for k, v in resultados.items()},
+    "variables_usadas": ["alcohol", "malic_acid", "color_intensity", "flavanoids"]
 }
 
-with open("metricas_modelo.json", "w") as f:
+with open("modelo/metricas_modelo.json", "w") as f:
     json.dump(metricas, f, indent=4)
 
-print("📄 Métricas guardadas en: metricas_modelo.json")
+print("📄 Métricas guardadas en: modelo/metricas_modelo.json")
 print("\n✅ ¡Proceso completado! Entrega al equipo:")
-print("   → modelo_casas.pkl")
-print("   → metricas_modelo.json")
+print("   → modelo/modelo_vinos.pkl")
+print("   → modelo/scaler_vinos.pkl")
+print("   → modelo/metricas_modelo.json")
