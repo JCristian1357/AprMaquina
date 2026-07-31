@@ -1,4 +1,4 @@
-API de Machine Learning para predecir precios de casas basándose en el dataset California Housing. Construida con **FastAPI** y **scikit-learn**.
+API de Mae Learning para predecir precios de casas basándose en el dataset California Housing. Construida con **FastAPI** y **scikit-learn**.
 
 ---
 
